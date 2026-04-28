@@ -4,7 +4,7 @@
 let video;
 let handPose;
 let hands = [];
-let particles = []; // 儲存火花粒子的陣列
+let bubbles = []; // 儲存水泡的陣列
 
 function preload() {
   // Initialize HandPose model with flipped video input
@@ -54,12 +54,12 @@ function draw() {
 
   image(video, displayX, displayY, displayWidth, displayHeight);
 
-  // 更新並繪製所有火花粒子
-  for (let i = particles.length - 1; i >= 0; i--) {
-    particles[i].update();
-    particles[i].display();
-    if (particles[i].isDead()) {
-      particles.splice(i, 1);
+  // 更新並繪製所有水泡
+  for (let i = bubbles.length - 1; i >= 0; i--) {
+    bubbles[i].update();
+    bubbles[i].display();
+    if (bubbles[i].isPopped()) {
+      bubbles.splice(i, 1);
     }
   }
 
@@ -75,10 +75,10 @@ function draw() {
           let my = map(kp.y, 0, video.height, displayY, displayY + displayHeight);
           points.push({ x: mx, y: my });
 
-          // 針對 4, 8, 12, 16, 20 產生火花 (每 5 幀產生一個，避免過多)
-          if ([4, 8, 12, 16, 20].includes(j) && frameCount % 5 === 0) {
-            let pColor = hand.handedness == "Left" ? color(255, 0, 255) : color(255, 255, 0);
-            particles.push(new Particle(mx, my, pColor));
+          // 針對指尖編號 4, 8, 12, 16, 20 產生水泡
+          if ([4, 8, 12, 16, 20].includes(j) && frameCount % 10 === 0) {
+            let bColor = hand.handedness == "Left" ? color(200, 100, 255, 150) : color(255, 255, 150, 150);
+            bubbles.push(new Bubble(mx, my, bColor));
           }
         }
 
@@ -119,63 +119,46 @@ function draw() {
   }
 }
 
-// 火花粒子類別
-class Particle {
-  constructor(x, y, color, isFragment = false) {
+// 水泡類別
+class Bubble {
+  constructor(x, y, color) {
     this.pos = createVector(x, y);
+    this.vel = createVector(random(-0.5, 0.5), random(-2, -1)); // 向上飄移
     this.color = color;
-    this.isFragment = isFragment; // 是否為爆炸後的碎片
-    this.exploded = false;
-    
-    if (this.isFragment) {
-      this.vel = p5.Vector.random2D().mult(random(1, 3));
-      this.lifespan = 255;
-    } else {
-      this.vel = createVector(random(-0.8, 0.8), random(-5, -3));
-      this.targetY = y - random(60, 150); // 設定向上飛多久後「破掉」
-    }
+    this.radius = random(5, 12);
+    this.popped = false;
+    this.targetY = y - random(50, 150); // 隨機上升高度後破掉
+    this.noiseOffset = random(1000); // 用於左右晃動的隨機偏移
   }
 
   update() {
+    // 模擬左右晃動
+    this.vel.x = map(noise(this.noiseOffset + frameCount * 0.02), 0, 1, -1, 1);
     this.pos.add(this.vel);
     
-    if (this.isFragment) {
-      this.lifespan -= 10;
-      this.vel.mult(0.95); // 碎片逐漸減速
-    } else {
-      // 如果到達目標高度，觸發爆炸
-      if (this.pos.y <= this.targetY) {
-        this.exploded = true;
-      }
+    // 到達指定高度或飛出畫布時破掉
+    if (this.pos.y <= this.targetY || this.pos.y < -this.radius) {
+      this.popped = true;
     }
   }
 
   display() {
     push();
-    noStroke();
-    let alpha = this.isFragment ? this.lifespan : 255;
-    let c = color(this.color);
-    c.setAlpha(alpha);
-    fill(c);
+    stroke(255, 200); // 白色描邊，增加水泡感
+    strokeWeight(1);
+    fill(this.color);
     
-    if (this.isFragment) {
-      circle(this.pos.x, this.pos.y, 4);
-    } else {
-      // 主火花繪製成小菱形或圓點
-      circle(this.pos.x, this.pos.y, 8);
-    }
+    // 畫出水泡主體
+    circle(this.pos.x, this.pos.y, this.radius * 2);
+    
+    // 畫出水泡的反光點
+    noStroke();
+    fill(255, 180);
+    circle(this.pos.x - this.radius * 0.3, this.pos.y - this.radius * 0.3, this.radius * 0.4);
     pop();
   }
 
-  isDead() {
-    if (this.isFragment) return this.lifespan <= 0;
-    if (this.exploded) {
-      // 當主火花破掉時，產生 6 個碎片
-      for (let i = 0; i < 6; i++) {
-        particles.push(new Particle(this.pos.x, this.pos.y, this.color, true));
-      }
-      return true;
-    }
-    return this.pos.y < 0;
+  isPopped() {
+    return this.popped;
   }
 }
